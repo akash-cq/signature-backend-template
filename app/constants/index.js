@@ -12,7 +12,7 @@ export const status = {
 
 export const signStatus = {
     unsigned: 0,
-    readForSign: 1,
+    readyForSign: 1,
     rejected: 2,
     delegated: 3,
     inProcess: 4,

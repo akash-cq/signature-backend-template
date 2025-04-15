@@ -11,7 +11,6 @@ import courtModel from "../../models/courts.js"
 const router = Router();
 router.get('/', checkLoginStatus, checkAdmin, async (req, res, next) => {
     try {
-
         const courtsWithUserCounts = await courtModel.aggregate([
             {
                 $match: { status: status.active }
