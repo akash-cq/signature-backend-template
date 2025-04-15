@@ -49,7 +49,21 @@ router.get("/", checkLoginStatus, async (req, res, next) => {
     next(error);
   }
 });
-
+router.get('/:id',checkLoginStatus,async (req,res,next) => {
+  try {
+      const id = req.params.id;
+      const data = await templateServices.findOne({id:id});
+      console.log(data)
+      const finaldata = data?.data.map((obj)=>{
+        return {
+          ...obj.data
+        }
+      })
+      return res.json(finaldata)
+  } catch (error) {
+    next(error)
+  }
+})
 router.post(
   "/",
   checkLoginStatus,
