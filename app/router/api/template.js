@@ -5,6 +5,7 @@ import { readTemplate, setTemplateDb } from "../../controller/Template.js";
 import { templateServices } from "../../services/index.js";
 import { signStatus, status } from "../../constants/index.js";
 import mongoose from "mongoose";
+import { update } from "../../services/users.js";
 
 const router = Router();
 
@@ -37,6 +38,7 @@ router.get("/", checkLoginStatus, async (req, res, next) => {
         createdAt: 1,
         updatedAt: 1,
         data: 1,
+        createdBy:1,
       },
       {}
     );
@@ -58,7 +60,7 @@ router.get("/", checkLoginStatus, async (req, res, next) => {
 router.get("/:id", checkLoginStatus, async (req, res, next) => {
   try {
     const id = req.params.id;
-    const template = await templateServices.findOne({ id: id });
+    const template = await templateServices.findOne({ id: id ,status:status.active});
     const finaldata = template?.data.map((obj) => {
       const object = {
         ...obj.data,
@@ -72,7 +74,14 @@ router.get("/:id", checkLoginStatus, async (req, res, next) => {
       if (obj.showOnExcel == true) return placeholder.push(obj.name);
     });
     const url = template.url;
-    return res.json({ finaldata, placeholder, url });
+    const metadata = {
+      id: template.id,
+      assignedTo: template.assignedTo,
+      createdBy: template.createdBy,
+      status: template.status,
+      signStatus: template.signStatus,
+    };
+    return res.json({ finaldata, placeholder, url,metadata });
   } catch (error) {
     next(error);
   }
@@ -109,8 +118,11 @@ router.post(
 router.patch("/:id", checkLoginStatus, async (req, res, next) => {
   try {
     const id = req.params.id;
-    const template = await templateServices.findOne({ id: id }, {}, {});
-    const keys = Object.keys(req.body.data[0]);
+    const template = await templateServices.findOne({ id: id,status:status.active }, {}, {});
+    if(!template){
+      return res.status(404).json({error:'template Request Not found'})
+    }
+    const keys = Object.keys(req.body[0]);
     const placeholder = [];
     template.templateVariables.forEach((obj) => {
       if (obj.showOnExcel == true) return placeholder.push(obj.name);
@@ -122,19 +134,64 @@ router.patch("/:id", checkLoginStatus, async (req, res, next) => {
         `this excel file have some placeholder which are not in template file`
       );
     }
-    const formattedData = data.map((row) => ({
+    const formattedData = req.body.map((row) => ({
       id: new mongoose.Types.ObjectId(),
       data: new Map(Object.entries(row)),
       signStatus: signStatus.unsigned,
     }));
     await templateServices.updateOne(
-      { id: id },
+      { id: id ,status:status.active},
       { $push: { data: { $each: formattedData } } }
     );
 
-    res.json({ msg: "success" });
+    res.json({msg:'success'});
   } catch (error) {
     next(error);
   }
 });
+router.delete('/:id',checkLoginStatus,async (req,res,next) => {
+  try {
+      const id = req.params.id;
+      const data = await templateServices.findOne({id:id,status:status.active},{},{});
+      if(!data){
+        return res.status(404).json({error:'Request Not Found'})
+      }
+      await templateServices.updateOne({id:id},{
+        $set:{status:status.deleted}
+      })
+      return res.json({ id: data.id });
+  } catch (error) {
+    console.log(error)
+    next(error)
+  }
+})
+router.post('/assign',checkLoginStatus,async (req,res,next) => {
+  try {
+      console.log(req.body)
+      const {selectedOfficer = '',Request={}} = req.body
+      if(!selectedOfficer){
+        return res.status(400).json({msg:'officer is Not Selected'});
+      }
+      if(!Request){
+        return res.status(400).json({msg:'request meta deta not found'});
+      }
+      await templateServices.updateOne(
+        {
+          id: Request.id,
+          status: status.active,
+        },
+        {
+          $set: {
+            assignedTo: selectedOfficer,
+            updatedBy:req.session.userId,
+            signStatus:signStatus.readyForSign,
+          },
+        }
+      );
+      res.json(signStatus.readyForSign);
+  } catch (error) {
+      console.log(error);
+      next(error)
+  }
+})
 export default router;

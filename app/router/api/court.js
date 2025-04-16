@@ -53,6 +53,7 @@ router.get('/officerForAssignment', checkLoginStatus, async (req, res, next) => 
             courtId: courtId,
             status: status.active,
             role: roles.officer,
+            id:{$ne:[req.session.userId]}
         }, { name: 1, id: 1 });
         return res.json(users);
     } catch (error) {

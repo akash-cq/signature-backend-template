@@ -27,7 +27,6 @@ export const readTemplate = async (file) => {
 
 export const setTemplateDb = async (payload, req, placeholder) => {
   try {
-    const { templateName, description, url } = payload;
     const { userId } = req.session;
     const body = await templateCretionSchema.safeParseAsync(payload);
     if (body.error) {
