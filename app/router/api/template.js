@@ -5,8 +5,6 @@ import { readTemplate, setTemplateDb } from "../../controller/Template.js";
 import { templateServices } from "../../services/index.js";
 import { signStatus, status } from "../../constants/index.js";
 import mongoose from "mongoose";
-import { update } from "../../services/users.js";
-
 const router = Router();
 
 router.get("/", checkLoginStatus, async (req, res, next) => {
@@ -130,9 +128,7 @@ router.patch("/:id", checkLoginStatus, async (req, res, next) => {
 
     const missingKeys = placeholder.filter((header) => !keys.includes(header));
     if (missingKeys.length > 0) {
-      throw new Error(
-        `this excel file have some placeholder which are not in template file`
-      );
+      return res.status(400).json({error:'template placeholder not found in this excel sheet'})
     }
     const formattedData = req.body.map((row) => ({
       id: new mongoose.Types.ObjectId(),
