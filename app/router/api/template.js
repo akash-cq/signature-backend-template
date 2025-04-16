@@ -42,6 +42,12 @@ router.get("/", checkLoginStatus, async (req, res, next) => {
     );
     let finalData = data.map((obj) => {
       obj.DocCount = obj.data.length;
+      obj.rejectCount = 0;
+      let count = 0;
+      for (let i = 0; i < obj.length; i++) {
+        if (obj[i].signStatus == signStatus.rejected) count++;
+      }
+      obj.rejectCount = count;
       return obj;
     });
     res.json(finalData);
@@ -49,21 +55,28 @@ router.get("/", checkLoginStatus, async (req, res, next) => {
     next(error);
   }
 });
-router.get('/:id',checkLoginStatus,async (req,res,next) => {
+router.get("/:id", checkLoginStatus, async (req, res, next) => {
   try {
-      const id = req.params.id;
-      const data = await templateServices.findOne({id:id});
-      console.log(data)
-      const finaldata = data?.data.map((obj)=>{
-        return {
-          ...obj.data
-        }
-      })
-      return res.json(finaldata)
+    const id = req.params.id;
+    const template = await templateServices.findOne({ id: id });
+    const finaldata = template?.data.map((obj) => {
+      const object = {
+        ...obj.data,
+      };
+      object.signStatus = obj.signStatus;
+      object.signedDate = obj.signedDate;
+      return object;
+    });
+    const placeholder = [];
+    template.templateVariables.forEach((obj) => {
+      if (obj.showOnExcel == true) return placeholder.push(obj.name);
+    });
+    const url = template.url;
+    return res.json({ finaldata, placeholder, url });
   } catch (error) {
-    next(error)
+    next(error);
   }
-})
+});
 router.post(
   "/",
   checkLoginStatus,
@@ -97,15 +110,17 @@ router.patch("/:id", checkLoginStatus, async (req, res, next) => {
   try {
     const id = req.params.id;
     const template = await templateServices.findOne({ id: id }, {}, {});
-    console.log(template);
-    const data = req.body;
-    const keys = Object.keys(data[0]);
-    const placeholder = template.templateVariables.map((obj) => {
-      if (obj.showOnExcel == true) return obj.name;
+    const keys = Object.keys(req.body.data[0]);
+    const placeholder = [];
+    template.templateVariables.forEach((obj) => {
+      if (obj.showOnExcel == true) return placeholder.push(obj.name);
     });
+
     const missingKeys = placeholder.filter((header) => !keys.includes(header));
     if (missingKeys.length > 0) {
-      throw new Error(`this excel file have some placeholder which are not in template file`);
+      throw new Error(
+        `this excel file have some placeholder which are not in template file`
+      );
     }
     const formattedData = data.map((row) => ({
       id: new mongoose.Types.ObjectId(),
@@ -113,8 +128,8 @@ router.patch("/:id", checkLoginStatus, async (req, res, next) => {
       signStatus: signStatus.unsigned,
     }));
     await templateServices.updateOne(
-      { id: id }, 
-      { $push: { data: { $each: formattedData } } } 
+      { id: id },
+      { $push: { data: { $each: formattedData } } }
     );
 
     res.json({ msg: "success" });
