@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { signStatus, status } from '../constants/index.js';
+import { type } from 'os';
 
 export const schema = new mongoose.Schema({
     'id': {
@@ -68,6 +69,10 @@ export const schema = new mongoose.Schema({
         rejectionReason: {
             type: String,
         },
+        status:{
+            type:Number,
+            default:status.active,
+        }
     }],
     'assignedTo': {
         type: mongoose.Schema.Types.ObjectId,

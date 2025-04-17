@@ -15,7 +15,7 @@ export const readTemplate = async (file) => {
       data = doc.getBody();
     })
     data = data.trim();
-    console.log(data)
+    // console.log(data)
     const placeholders = [...data.matchAll(/{(.*?)}/g)].map((m) => m[1]);
 
     return placeholders;
@@ -43,7 +43,7 @@ export const setTemplateDb = async (payload, req, placeholder) => {
         showOnExcel:true,
       }
       if(name=='Signature')obj.showOnExcel = false;
-      if(name=='QR Code'){
+      if(name=='QR_Code'){
         obj.required=false;
         obj.showOnExcel = false;
       }
