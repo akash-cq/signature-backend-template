@@ -6,6 +6,7 @@ import { templateServices } from "../../services/index.js";
 import { signStatus, status } from "../../constants/index.js";
 import Exceljs from "exceljs";
 import mongoose from "mongoose";
+import { assign } from "nodemailer/lib/shared/index.js";
 const router = Router();
 
 router.get("/", checkLoginStatus, async (req, res, next) => {
@@ -17,6 +18,7 @@ router.get("/", checkLoginStatus, async (req, res, next) => {
             $or: [
               { assignedTo: req.session.userId },
               { createdBy: req.session.userId },
+              { delegatedTo: req.session.userId },
             ],
           },
           {
@@ -38,6 +40,8 @@ router.get("/", checkLoginStatus, async (req, res, next) => {
         updatedAt: 1,
         data: 1,
         createdBy: 1,
+        delegationReason: 1,
+        description: 1,
       },
       {}
     );
@@ -51,7 +55,9 @@ router.get("/", checkLoginStatus, async (req, res, next) => {
       const rejectCount = obj.data.reduce((count, element) => {
         return element.signStatus === signStatus.rejected ? count + 1 : count;
       }, 0);
-
+      if (presentData.length != 0 && rejectCount == presentData.length) {
+        obj.signStatus = signStatus.rejected;
+      }
       return {
         ...obj,
         DocCount: presentData.length,
@@ -64,6 +70,7 @@ router.get("/", checkLoginStatus, async (req, res, next) => {
     next(error);
   }
 });
+
 router.get("/:id", checkLoginStatus, async (req, res, next) => {
   try {
     const id = req.params.id;
@@ -72,7 +79,7 @@ router.get("/:id", checkLoginStatus, async (req, res, next) => {
     }
     const template = await templateServices.findOne({
       id: id,
-      status: status.active,
+      status: [status.active,status.pending]
     });
     if (!template) {
       return res.status(404).json({ error: "data not found" });
@@ -93,10 +100,10 @@ router.get("/:id", checkLoginStatus, async (req, res, next) => {
           signStatus: obj.signStatus,
           signedDate: obj.signedDate,
           rejectionReason: obj.rejectionReason,
+          url:obj.url
         };
         return object;
       });
-
     const placeholder = [];
 
     template.templateVariables.forEach((obj) => {
@@ -116,6 +123,7 @@ router.get("/:id", checkLoginStatus, async (req, res, next) => {
     next(error);
   }
 });
+
 router.post(
   "/",
   checkLoginStatus,
@@ -126,16 +134,22 @@ router.post(
       const { path } = req.file;
       const url = path.replace(/\\/g, "/");
       const placeholder = await readTemplate(url);
+      for (let i = 0; i < placeholder.length; i++) {
+        if (placeholder[i].includes(" ") && !placeholder[i].includes("IMAGE Signature()"))
+          return res
+            .status(400)
+            .json({ error: "placeholder have spaces it must be without trim" });
+      }
       if (placeholder == null || placeholder.length <= 0)
         return res.status(400).json({ error: "no placeholder found" });
       console.log(placeholder);
       if (
-        !placeholder.includes("Signature") ||
+        !placeholder.includes("IMAGE Signature()") ||
         !placeholder.includes("QR_Code")
       ) {
         return res.status(400).json({
           error:
-            "no Signature or QR_Code placeholder found please insert these also",
+            "no {IMAGE Signature()} or {QR_Code} placeholder found please insert these also",
         });
       }
       const data = await setTemplateDb(
@@ -155,6 +169,7 @@ router.post(
     }
   }
 );
+
 router.patch("/:id", checkLoginStatus, async (req, res, next) => {
   try {
     const id = req.params.id;
@@ -191,6 +206,8 @@ router.patch("/:id", checkLoginStatus, async (req, res, next) => {
       id: new mongoose.Types.ObjectId(),
       data: new Map(Object.entries(row)),
       signStatus: signStatus.unsigned,
+      url:null,
+      signedDate:null
     }));
 
     const d = await templateServices.updateOne(
@@ -204,6 +221,7 @@ router.patch("/:id", checkLoginStatus, async (req, res, next) => {
     next(error);
   }
 });
+
 router.delete("/:id", checkLoginStatus, async (req, res, next) => {
   try {
     const id = req.params.id;
@@ -230,6 +248,7 @@ router.delete("/:id", checkLoginStatus, async (req, res, next) => {
     next(error);
   }
 });
+
 router.post("/assign", checkLoginStatus, async (req, res, next) => {
   try {
     const { selectedOfficer = "", Request = {} } = req.body;
@@ -244,6 +263,7 @@ router.post("/assign", checkLoginStatus, async (req, res, next) => {
         id: Request.id,
         status: status.active,
         createdBy: req.session.userId,
+        signStatus: signStatus.unsigned,
       },
       {
         $set: {
@@ -351,7 +371,6 @@ router.get("/download/:id", checkLoginStatus, async (req, res, next) => {
   }
 });
 
-
 router.post("/reject", checkLoginStatus, async (req, res, next) => {
   try {
     console.log(req.body);
@@ -362,7 +381,7 @@ router.post("/reject", checkLoginStatus, async (req, res, next) => {
     if (rejection.trim() == "") {
       return res.status(400).json({ error: "please provide the reason" });
     }
-    if (Object.keys(Detail).length==0) {
+    if (Object.keys(Detail).length == 0) {
       return res
         .status(400)
         .json({ error: "no detail provided of the rejected document" });
@@ -400,8 +419,77 @@ router.post("/reject", checkLoginStatus, async (req, res, next) => {
         };
         return object;
       });
-      console.log(finaldata)
+    console.log(finaldata);
     return res.json({ finaldata });
+  } catch (error) {
+    console.log(error);
+    next(error);
+  }
+});
+
+router.post("/clone", checkLoginStatus, async (req, res, next) => {
+  try {
+    const { id = "", templateName = "", description = "", url = "" } = req.body;
+    if (!id && !templateName && !description && !url) {
+      return res
+        .status(400)
+        .json({ error: "no data is provided for the clone" });
+    }
+    const data = await templateServices.findOne({ id: id });
+    if (!data) {
+      return res.status(404).json({ error: "data is not found in database" });
+    }
+    const templateVeriables = data.templateVariables.map((obj) => obj.name);
+    console.log(templateVeriables);
+    const newTemplate = await setTemplateDb(
+      {
+        templateName: templateName,
+        description: description,
+        url: url,
+      },
+      req,
+      templateVeriables
+    );
+    console.log(newTemplate);
+    return res.json({ data: newTemplate });
+  } catch (error) {
+    console.log(error);
+    next(error);
+  }
+});
+router.post("/delegated", checkLoginStatus, async (req, res, next) => {
+  try {
+    const { userId } = req.session;
+    const { delegationReason = "", createdBy, id } = req.body;
+    if (!id) {
+      return res.status(400).json({ error: "Request id not given" });
+    }
+    if (delegationReason == "") {
+      return res.status(400).json({ error: "delegation Reason is not given" });
+    }
+    console.log(createdBy, id, userId);
+    const data = await templateServices.updateOne(
+      {
+        id: id,
+        signStatus: signStatus.readyForSign,
+        assignedTo: userId,
+        createdBy: createdBy,
+      },
+      {
+        $set: {
+          delegationReason: delegationReason,
+          delegatedTo: createdBy,
+          signStatus: signStatus.delegated,
+          "data.$[].signStatus": signStatus.delegated,
+        },
+      },
+      { new: true }
+    );
+    console.log(data);
+    if (!data) {
+      return res.status(501).json({ error: "something wrong" });
+    }
+    return res.json(data);
   } catch (error) {
     console.log(error);
     next(error);

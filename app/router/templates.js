@@ -5,9 +5,9 @@ import * as fs from "fs";
 import path from "path";
 import { FillTemplate } from "../controller/FillTemplates.js";
 import { promisify } from "util";
+import libre from "libreoffice-convert";
 const libreConvertAsync = promisify(libre.convert);
 
-import libre from "libreoffice-convert";
 import { checkLoginStatus } from "../middleware/checkAuth.js";
 
 const router = Router();
@@ -35,16 +35,16 @@ router.get("/:templateId/preview/:entryId", async (req, res, next) => {
     }
     console.log(template.url);
     const entries = data[0]?.data;
-    entries["Signature"] = "{Signature}";
-    entries["QR_Code"] = "{QR_Code}";
+    entries["Signature"] =null;
+    entries["QR_Code"] = null;
     const content = await fs.promises.readFile(
       path.join("E:/Signature/signature-backend-template", template.url)
     );
     const buffer = await FillTemplate(content, entries);
     let pdfBuf = await libreConvertAsync(buffer, ".pdf", undefined);
-
+    let a = new Date()
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", "inline; filename=preview.pdf");
+    res.setHeader("Content-Disposition", `inline; filename=preview (${a}).pdf`);
     res.send(pdfBuf);
   } catch (error) {
     console.log(error);

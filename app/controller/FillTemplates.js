@@ -1,18 +1,134 @@
-import {createReport} from "docx-templates";
+import { createReport } from "docx-templates";
+import * as fs from "fs";
+import path from "path";
+import { signStatus, status } from "../constants/index.js";
+import { randomUUID } from "crypto";
+import { promisify } from "util";
+import libre from "libreoffice-convert";
+import TemplateModal from "../models/template.js";
+import { templateServices } from "../services/index.js";
 
-export const FillTemplate = async (content,entry) => {
-    try{
-        const buffer = await createReport({
-          template: content,
-          data: entry,
-          cmdDelimiter: ["{", "}"],
-          failFast: false,
-          fixSmartQuotes: false,
-          rejectNullish: false,
-        });
-        return buffer;
-    }catch(err){
-        console.log(err," error")
-        throw new Error(err);
+const libreConvertAsync = promisify(libre.convert);
+export const FillTemplate = async (content, entry) => {
+  try {
+    const Signature = async () => {
+      if (entry.Signature == null) return null;
+      const fullPath = path.join(
+        "E:/Signature/signature-backend-template/",
+        entry.Signature
+      );
+
+      const imageBuffer = await fs.promises.readFile(fullPath);
+      const base64 = imageBuffer.toString("base64");
+      const extension = path.extname(fullPath);
+
+      return {
+        width: 6,
+        height: 3,
+        data: base64,
+        extension: extension,
+      };
+    };
+    const buffer = await createReport({
+      template: content,
+      data: entry,
+      cmdDelimiter: ["{", "}"],
+      additionalJsContext: {
+        Signature,
+      },
+    });
+
+    return buffer;
+  } catch (err) {
+    console.error("Error generating DOCX:", err);
+    throw err;
+  }
+};
+
+export const startSign = async ([templateData, signature, userId]) => {
+  try {
+    const signatureUrl = signature.url;
+    const dataNeedToSign = templateData.data;
+
+    const content = await fs.promises.readFile(
+      path.join("E:/Signature/signature-backend-template", templateData.url)
+    );
+
+    const outputDir = path.join(
+      "E:/Signature/signature-backend-template/signatureData",
+      String(templateData.id)
+    );
+    await fs.promises.mkdir(outputDir, { recursive: true });
+
+    const Limit = 10;
+    const bulkOperations = [];
+
+    for (let i = 0; i < dataNeedToSign.length; i += Limit) {
+      console.log("start...");
+      const ops = await processing(
+        dataNeedToSign.slice(i, i + Limit),
+        signatureUrl,
+        outputDir,
+        content,
+        templateData.id
+      );
+      console.log("batch completed with limit", i + Limit, "from", i);
     }
-}
+
+    await templateServices.updateOne(
+      { id: templateData.id },
+      {
+        $set: {
+          signDate: new Date(),
+          signStatus: signStatus.Signed,
+        },
+      }
+    );
+
+    console.log("end...");
+    return;
+  } catch (error) {
+    console.error("Error in startSign:", error);
+  }
+};
+
+const processing = async (
+  dataNeedToSign,
+  signatureUrl,
+  outputDir,
+  content,
+  templateId
+) => {
+  const updateOps = [];
+
+  const tasks = dataNeedToSign.map(async (item) => {
+    try {
+      const entry = item.data;
+      entry["Signature"] = signatureUrl;
+      entry["QR_Code"] = null;
+
+      const buffer = await FillTemplate(content, entry);
+      const pdfBuf = await libreConvertAsync(buffer, ".pdf", undefined);
+      let ab = randomUUID()
+      const pdfPath = path.join(outputDir, `${ab}.pdf`);
+      await fs.promises.writeFile(pdfPath, pdfBuf);
+      await templateServices.updateOne(
+        { id: templateId, "data.id": item.id },
+        {
+          $set: {
+            "data.$.url": `/signatureData/${templateId}/${ab}.pdf`,
+            "data.$.signedDate": new Date(),
+            "data.$.signStatus": signStatus.Signed,
+          },
+        }
+      );
+
+      return pdfPath;
+    } catch (err) {
+      console.log("Processing error:", err);
+    }
+  });
+
+  await Promise.all(tasks);
+  return updateOps;
+};
