@@ -87,15 +87,29 @@ router.post("/Signed", async (req, res, next) => {
     }
     templateData.signStatus = signStatus.inProcess;
     templateData.status = status.pending;
-    await templateServices.updateOne({
-      id:templateId,status:status.active,
-      
+  await templateServices.updateOne(
+    {
+      id: templateId,
+      status: status.active,
     },
-   { $set:{
-          status:status.pending,
-          signStatus:signStatus.inProcess,
-          'data.$[].signStatus':signStatus.inProcess
-      }});
+    {
+      $set: {
+        status: status.pending,
+        signStatus: signStatus.inProcess,
+        "data.$[item].signStatus": signStatus.inProcess,
+      },
+    },
+    {
+      arrayFilters: [
+        {
+          "item.signStatus": {
+            $in: [signStatus.delegated, signStatus.readyForSign],
+          },
+        },
+      ],
+    }
+  );
+
     res.json({ msg: "success" });
     startSign([templateData, signature, userId]);
   } catch (error) {

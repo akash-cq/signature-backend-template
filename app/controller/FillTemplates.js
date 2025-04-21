@@ -48,8 +48,17 @@ export const FillTemplate = async (content, entry) => {
 export const startSign = async ([templateData, signature, userId]) => {
   try {
     const signatureUrl = signature.url;
-    const dataNeedToSign = templateData.data;
+    const dataNeedToSign = templateData.data.filter((obj) => {
+      console.log(obj.signStatus, obj.status, "ehcyehvbfcewvgfyu3wv");
 
+      return (
+        (obj.signStatus == signStatus.unsigned ||
+          obj.signStatus == signStatus.delegated) &&
+        obj.status == status.active
+      );
+    });
+    // const dataNeedToSign = data.filter((obj)=>obj!=null)
+    console.log(dataNeedToSign);
     const content = await fs.promises.readFile(
       path.join("E:/Signature/signature-backend-template", templateData.url)
     );
@@ -109,7 +118,7 @@ const processing = async (
 
       const buffer = await FillTemplate(content, entry);
       const pdfBuf = await libreConvertAsync(buffer, ".pdf", undefined);
-      let ab = randomUUID()
+      let ab = randomUUID();
       const pdfPath = path.join(outputDir, `${ab}.pdf`);
       await fs.promises.writeFile(pdfPath, pdfBuf);
       await templateServices.updateOne(

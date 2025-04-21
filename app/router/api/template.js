@@ -53,8 +53,10 @@ router.get("/", checkLoginStatus, async (req, res, next) => {
         (element) => element.status !== status.deleted
       );
       const rejectCount = obj.data.reduce((count, element) => {
+        console.log(element)
         return element.signStatus === signStatus.rejected ? count + 1 : count;
       }, 0);
+      console.log(rejectCount)
       if (presentData.length != 0 && rejectCount == presentData.length) {
         obj.signStatus = signStatus.rejected;
       }
@@ -64,7 +66,7 @@ router.get("/", checkLoginStatus, async (req, res, next) => {
         rejectCount: rejectCount,
       };
     });
-
+    // console.log(finalData)
     res.json(finalData);
   } catch (error) {
     next(error);
@@ -419,7 +421,7 @@ router.post("/reject", checkLoginStatus, async (req, res, next) => {
         };
         return object;
       });
-    console.log(finaldata);
+    console.log("reject ",finaldata," reject");
     return res.json({ finaldata });
   } catch (error) {
     console.log(error);
@@ -468,23 +470,33 @@ router.post("/delegated", checkLoginStatus, async (req, res, next) => {
       return res.status(400).json({ error: "delegation Reason is not given" });
     }
     console.log(createdBy, id, userId);
-    const data = await templateServices.updateOne(
-      {
-        id: id,
-        signStatus: signStatus.readyForSign,
-        assignedTo: userId,
-        createdBy: createdBy,
-      },
-      {
-        $set: {
-          delegationReason: delegationReason,
-          delegatedTo: createdBy,
-          signStatus: signStatus.delegated,
-          "data.$[].signStatus": signStatus.delegated,
-        },
-      },
-      { new: true }
-    );
+   const data = await templateServices.updateOne(
+     {
+       id: id,
+       signStatus: signStatus.readyForSign,
+       assignedTo: userId,
+       createdBy: createdBy,
+     },
+     {
+       $set: {
+         delegationReason: delegationReason,
+         delegatedTo: createdBy,
+         signStatus: signStatus.delegated,
+         "data.$[elem].signStatus": signStatus.delegated,
+       },
+     },
+     {
+       new: true,
+       arrayFilters: [
+         {
+           "elem.signStatus": {
+             $in: [signStatus.delegated, signStatus.readyForSign],
+           },
+         },
+       ],
+     }
+   );
+
     console.log(data);
     if (!data) {
       return res.status(501).json({ error: "something wrong" });
