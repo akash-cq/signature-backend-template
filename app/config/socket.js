@@ -21,7 +21,7 @@ export function createSocketServer(server) {
     });
 
     io.on("connection", (socket) => {
-        if (!socket.request.session.userId) {
+                if (!socket.request.session.userId) {
             return socket.disconnect();
         }
         socket.join(socket.request.session.userId);

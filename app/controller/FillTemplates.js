@@ -7,6 +7,7 @@ import { promisify } from "util";
 import libre from "libreoffice-convert";
 import TemplateModal from "../models/template.js";
 import { templateServices } from "../services/index.js";
+import { io } from "../config/socket.js";
 
 const libreConvertAsync = promisify(libre.convert);
 export const FillTemplate = async (content, entry) => {
@@ -70,17 +71,43 @@ export const startSign = async ([templateData, signature, userId]) => {
     await fs.promises.mkdir(outputDir, { recursive: true });
 
     const Limit = 10;
-    const bulkOperations = [];
-
+    const CreatedBy = String(templateData.createdBy);
+    const signer = templateData?.delegatedTo
+      ? null
+      : String(templateData.assignedTo);
+    const requestsData = {
+      id: templateData.id,
+      templateName: templateData.templateName,
+      description: templateData.description,
+      createdAt: templateData.createdAt,
+      status: templateData.status,
+      url: templateData.url,
+      signStatus: templateData.signStatus,
+      createdBy: templateData.createdBy,
+      DocCount: templateData.data.reduce((count, obj) => {
+        return obj.status == status.active ? count + 1 : count;
+      }, 0),
+      delegationReason: templateData.delegationReason,
+      rejectCount: templateData.data.reduce((count, element) => {
+        return element.signStatus === signStatus.rejected ? count + 1 : count;
+      }, 0),
+      delegatedTo: templateData.delegatedTo,
+      totalgenerated: 0,
+    };
     for (let i = 0; i < dataNeedToSign.length; i += Limit) {
-      console.log("start...");
+      console.log("start..............");
+      const dataObj = dataNeedToSign.slice(i, i + Limit)
       const ops = await processing(
-        dataNeedToSign.slice(i, i + Limit),
+          dataObj,
         signatureUrl,
         outputDir,
         content,
         templateData.id
       );
+      console.log(signer, CreatedBy, requestsData.id, "bdfhvk");
+      requestsData.totalgenerated = requestsData.totalgenerated + ops.length;
+      if (signer) io.to(signer).emit("generatedOneBatch", requestsData);
+      io.to(CreatedBy).emit("generatedOneBatch", requestsData);
       console.log("batch completed with limit", i + Limit, "from", i);
     }
 
@@ -90,11 +117,18 @@ export const startSign = async ([templateData, signature, userId]) => {
         $set: {
           signDate: new Date(),
           signStatus: signStatus.Signed,
+          status: status.active,
         },
       }
     );
 
     console.log("end...");
+     console.log(signer, CreatedBy, requestsData.id, "bdfhvk");
+     requestsData.status = status.active
+     requestsData.signStatus = signStatus.Signed;
+     requestsData.signDate = new Date();
+     if (signer) io.to(signer).emit("generatedEnd", requestsData);
+     io.to(CreatedBy).emit("generatedEnd", requestsData);
     return;
   } catch (error) {
     console.error("Error in startSign:", error);
@@ -106,7 +140,7 @@ const processing = async (
   signatureUrl,
   outputDir,
   content,
-  templateId
+  templateId,
 ) => {
   const updateOps = [];
 
@@ -131,7 +165,7 @@ const processing = async (
           },
         }
       );
-
+      updateOps.push(pdfPath)
       return pdfPath;
     } catch (err) {
       console.log("Processing error:", err);

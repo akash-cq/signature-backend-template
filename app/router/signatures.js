@@ -54,7 +54,6 @@ router.delete('/:signatureId',checkLoginStatus,async (req,res,next)=>{
             new: true,
           }
         );
-        console.log(data)
         if(!data){
             return res.status(404).json({error:'no Signature found'})
         }

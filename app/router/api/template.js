@@ -7,8 +7,8 @@ import { signStatus, status } from "../../constants/index.js";
 import Exceljs from "exceljs";
 import mongoose from "mongoose";
 import { assign } from "nodemailer/lib/shared/index.js";
+import { io } from "../../config/socket.js";
 const router = Router();
-
 router.get("/", checkLoginStatus, async (req, res, next) => {
   try {
     let data = await templateServices.find(
@@ -53,10 +53,8 @@ router.get("/", checkLoginStatus, async (req, res, next) => {
         (element) => element.status !== status.deleted
       );
       const rejectCount = obj.data.reduce((count, element) => {
-        console.log(element)
         return element.signStatus === signStatus.rejected ? count + 1 : count;
       }, 0);
-      console.log(rejectCount)
       if (presentData.length != 0 && rejectCount == presentData.length) {
         obj.signStatus = signStatus.rejected;
       }
@@ -66,7 +64,7 @@ router.get("/", checkLoginStatus, async (req, res, next) => {
         rejectCount: rejectCount,
       };
     });
-    // console.log(finalData)
+
     res.json(finalData);
   } catch (error) {
     next(error);
@@ -119,6 +117,7 @@ router.get("/:id", checkLoginStatus, async (req, res, next) => {
       createdBy: template.createdBy,
       status: template.status,
       signStatus: template.signStatus,
+      delegatedTo:template.delegatedTo
     };
     return res.json({ finaldata, placeholder, url, metadata });
   } catch (error) {
@@ -144,7 +143,6 @@ router.post(
       }
       if (placeholder == null || placeholder.length <= 0)
         return res.status(400).json({ error: "no placeholder found" });
-      console.log(placeholder);
       if (
         !placeholder.includes("IMAGE Signature()") ||
         !placeholder.includes("QR_Code")
@@ -164,7 +162,6 @@ router.post(
         placeholder
       );
       if (!data) return res.status(404).json({ msg: "something wrong" });
-      console.log(data);
       return res.json({ data: data });
     } catch (error) {
       next(error);
@@ -275,6 +272,7 @@ router.post("/assign", checkLoginStatus, async (req, res, next) => {
         },
       }
     );
+         
     res.json(signStatus.readyForSign);
   } catch (error) {
     console.log(error);
@@ -333,7 +331,6 @@ router.get("/route/:templateId", async (req, res) => {
 router.get("/download/:id", checkLoginStatus, async (req, res, next) => {
   try {
     const { id } = req.params;
-    console.log(id, req.params);
     if (!id) {
       return res.status(400).json({ error: "id is not given" });
     }
@@ -375,7 +372,6 @@ router.get("/download/:id", checkLoginStatus, async (req, res, next) => {
 
 router.post("/reject", checkLoginStatus, async (req, res, next) => {
   try {
-    console.log(req.body);
     const { rejection = "", Detail = {}, templateId = "" } = req.body;
     if (!templateId) {
       return res.status(400).json({ error: "request id is not given" });
@@ -409,6 +405,7 @@ router.post("/reject", checkLoginStatus, async (req, res, next) => {
         new: true,
       }
     );
+
     const finaldata = datatemplate?.data
       .filter((obj) => obj.status != status.deleted)
       .map((obj) => {
@@ -421,7 +418,6 @@ router.post("/reject", checkLoginStatus, async (req, res, next) => {
         };
         return object;
       });
-    console.log("reject ",finaldata," reject");
     return res.json({ finaldata });
   } catch (error) {
     console.log(error);
@@ -442,7 +438,6 @@ router.post("/clone", checkLoginStatus, async (req, res, next) => {
       return res.status(404).json({ error: "data is not found in database" });
     }
     const templateVeriables = data.templateVariables.map((obj) => obj.name);
-    console.log(templateVeriables);
     const newTemplate = await setTemplateDb(
       {
         templateName: templateName,
@@ -452,7 +447,6 @@ router.post("/clone", checkLoginStatus, async (req, res, next) => {
       req,
       templateVeriables
     );
-    console.log(newTemplate);
     return res.json({ data: newTemplate });
   } catch (error) {
     console.log(error);
@@ -469,7 +463,6 @@ router.post("/delegated", checkLoginStatus, async (req, res, next) => {
     if (delegationReason == "") {
       return res.status(400).json({ error: "delegation Reason is not given" });
     }
-    console.log(createdBy, id, userId);
    const data = await templateServices.updateOne(
      {
        id: id,
@@ -497,7 +490,6 @@ router.post("/delegated", checkLoginStatus, async (req, res, next) => {
      }
    );
 
-    console.log(data);
     if (!data) {
       return res.status(501).json({ error: "something wrong" });
     }
