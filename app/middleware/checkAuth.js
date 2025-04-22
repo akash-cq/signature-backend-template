@@ -22,6 +22,7 @@ export const checkLoginOrInternalRequest = (req, res, next) => {
     
     const isInternalRequest = !!req.headers['x-internal-req'];
     if (isInternalRequest) {
+        console.log(internalRequestToken)
         if ( req.headers['x-internal-req'] === internalRequestToken ) {
             req.isInternalRequest = true;
             return next();

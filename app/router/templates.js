@@ -30,6 +30,12 @@ router.get("/:templateId/preview/:entryId", async (req, res, next) => {
     if (!template) {
       return res.status(404).json({ error: "no template found" });
     }
+    if (
+      template.createdBy != req.session.userId &&
+      template.assignedTo != req.session.userId
+    ) {
+      return res.status(401).json({ error: "you are not authroized for this" });
+    }
     const data = template.data.filter((obj) => obj.id == entryId);
     if (data.length == 0) {
       return res.status(404).json({ error: "no excel entry found" });
@@ -69,6 +75,7 @@ router.get("/preview/docx/:id", checkLoginStatus, async (req, res, next) => {
     if (!url) {
       return res.status(404).json({ error: "template not found" });
     }
+
     console.log(url);
     const content = await fs.promises.readFile(
       path.join("E:/Signature/signature-backend-template", url)
@@ -91,6 +98,16 @@ router.get(
     try {
       console.log(req.url);
       const { signatureId, fileId } = req.params;
+      const { preview } = req.query;
+      const template = await templateServices.findOne({
+        id:signatureId,status:status.active
+      })
+      if(!template){
+        return res.status(404).json({error:'no tamplate found'})
+      }
+      if (template.createdBy!=req.session.userId && template.assignedTo!=req.session.userId) {
+        return res.status(401).json({ error: "you are not authorized for this" });
+      }
       const filePath = path.join(
         "E:/Signature/signature-backend-template",
         "signatureData",
@@ -99,10 +116,11 @@ router.get(
       );
 
       res.setHeader("Content-Type", "application/pdf");
-      res.setHeader(
-        "Content-Disposition",
-        "attachement; filename=download.pdf"
-      );
+      if (!preview) {
+        res.setHeader("Content-Disposition","attachement; filename=download.pdf");
+      } else {
+        res.setHeader("Content-Disposition", "inline; filename=download.pdf");
+      }
       const fileStream = fs.createReadStream(filePath);
       fileStream.pipe(res);
     } catch (error) {
@@ -119,6 +137,7 @@ router.get(
     try {
       console.log(req.url);
       const { templateId } = req.params;
+
       if (!templateId) {
         return req.status(400).json({ error: "no template id provided" });
       }

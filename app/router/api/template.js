@@ -1,50 +1,15 @@
 import { Router } from "express";
 import { checkLoginStatus } from "../../middleware/checkAuth.js";
 import upload from "../../multer/index.js";
-import { readTemplate, setTemplateDb } from "../../controller/Template.js";
+import { readTemplate, readtemplateFromDb, setTemplateDb } from "../../controller/Template.js";
 import { templateServices } from "../../services/index.js";
 import { signStatus, status } from "../../constants/index.js";
 import Exceljs from "exceljs";
 import mongoose from "mongoose";
-import { assign } from "nodemailer/lib/shared/index.js";
-import { io } from "../../config/socket.js";
 const router = Router();
 router.get("/", checkLoginStatus, async (req, res, next) => {
   try {
-    let data = await templateServices.find(
-      {
-        $and: [
-          {
-            $or: [
-              { assignedTo: req.session.userId },
-              { createdBy: req.session.userId },
-              { delegatedTo: req.session.userId },
-            ],
-          },
-          {
-            $or: [{ status: status.active }, { status: status.pending }],
-          },
-        ],
-      },
-      {
-        id: 1,
-        url: 1,
-        status: 1,
-        description: 1,
-        templateName: 1,
-        assignedTo: 1,
-        rejectionReason: 1,
-        delegatedTo: 1,
-        signStatus: 1,
-        createdAt: 1,
-        updatedAt: 1,
-        data: 1,
-        createdBy: 1,
-        delegationReason: 1,
-        description: 1,
-      },
-      {}
-    );
+    const data = await readtemplateFromDb(req);
     if (!data || data.length == 0) {
       return res.status(404).json({ error: "data not be found" });
     }
@@ -225,7 +190,7 @@ router.delete("/:id", checkLoginStatus, async (req, res, next) => {
   try {
     const id = req.params.id;
     const data = await templateServices.findOne(
-      { id: id, status: status.active },
+      { id: id, status: status.active,signStatus:signStatus.unsigned },
       {},
       {}
     );
@@ -287,7 +252,7 @@ router.delete(
     try {
       const { id, templateId } = req.params;
       const data = await templateServices.findOne(
-        { id: templateId, status: status.active },
+        { id: templateId, status: status.active,signStatus:signStatus.unsigned},
         {},
         {}
       );
@@ -393,6 +358,8 @@ router.post("/reject", checkLoginStatus, async (req, res, next) => {
         id: templateId,
         assignedTo: req.session.userId,
         "data.id": id,
+        status:status.active,
+        signStatus:signStatus.readyForSign
       },
       {
         $set: {
@@ -469,6 +436,7 @@ router.post("/delegated", checkLoginStatus, async (req, res, next) => {
        signStatus: signStatus.readyForSign,
        assignedTo: userId,
        createdBy: createdBy,
+       status:status.active
      },
      {
        $set: {

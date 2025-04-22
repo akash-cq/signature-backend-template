@@ -19,7 +19,7 @@ router.post(
       const Signaturecreation = {
         id: new mongoose.Types.ObjectId(),
         userId:req.session.userId,
-        url:filePath,
+        url:`http://localhost:3000/${filePath}`,
         status:status.active,
         createdBy:req.session.userId,
         updatedBy:req.session.userId,

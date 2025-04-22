@@ -5,23 +5,29 @@ import { signStatus, status } from "../constants/index.js";
 import { randomUUID } from "crypto";
 import { promisify } from "util";
 import libre from "libreoffice-convert";
-import TemplateModal from "../models/template.js";
 import { templateServices } from "../services/index.js";
 import { io } from "../config/socket.js";
+import axios from "axios";
 
 const libreConvertAsync = promisify(libre.convert);
+
+async function getImageBase64FromURL(imageUrl) {
+  const response = await axios.get(imageUrl, { responseType: "arraybuffer" });
+
+  const imageBuffer = Buffer.from(response.data, "binary");
+  const base64 = imageBuffer.toString("base64");
+
+  const extension = path.extname(imageUrl);
+
+  return { base64, extension };
+}
+
 export const FillTemplate = async (content, entry) => {
   try {
     const Signature = async () => {
       if (entry.Signature == null) return null;
-      const fullPath = path.join(
-        "E:/Signature/signature-backend-template/",
-        entry.Signature
-      );
-
-      const imageBuffer = await fs.promises.readFile(fullPath);
-      const base64 = imageBuffer.toString("base64");
-      const extension = path.extname(fullPath);
+      const imageUrl = entry.Signature;
+      const { base64, extension } = await getImageBase64FromURL(imageUrl);
 
       return {
         width: 6,
@@ -58,7 +64,6 @@ export const startSign = async ([templateData, signature, userId]) => {
         obj.status == status.active
       );
     });
-    // const dataNeedToSign = data.filter((obj)=>obj!=null)
     console.log(dataNeedToSign);
     const content = await fs.promises.readFile(
       path.join("E:/Signature/signature-backend-template", templateData.url)
@@ -72,9 +77,11 @@ export const startSign = async ([templateData, signature, userId]) => {
 
     const Limit = 10;
     const CreatedBy = String(templateData.createdBy);
+
     const signer = templateData?.delegatedTo
       ? null
       : String(templateData.assignedTo);
+
     const requestsData = {
       id: templateData.id,
       templateName: templateData.templateName,
@@ -87,18 +94,23 @@ export const startSign = async ([templateData, signature, userId]) => {
       DocCount: templateData.data.reduce((count, obj) => {
         return obj.status == status.active ? count + 1 : count;
       }, 0),
+
       delegationReason: templateData.delegationReason,
+
       rejectCount: templateData.data.reduce((count, element) => {
         return element.signStatus === signStatus.rejected ? count + 1 : count;
       }, 0),
+
       delegatedTo: templateData.delegatedTo,
       totalgenerated: 0,
     };
+        if (signer) io.to(signer).emit("generationStart", requestsData);
+        io.to(CreatedBy).emit("generationStart", requestsData);
     for (let i = 0; i < dataNeedToSign.length; i += Limit) {
       console.log("start..............");
-      const dataObj = dataNeedToSign.slice(i, i + Limit)
+      const dataObj = dataNeedToSign.slice(i, i + Limit);
       const ops = await processing(
-          dataObj,
+        dataObj,
         signatureUrl,
         outputDir,
         content,
@@ -121,14 +133,13 @@ export const startSign = async ([templateData, signature, userId]) => {
         },
       }
     );
-
     console.log("end...");
-     console.log(signer, CreatedBy, requestsData.id, "bdfhvk");
-     requestsData.status = status.active
-     requestsData.signStatus = signStatus.Signed;
-     requestsData.signDate = new Date();
-     if (signer) io.to(signer).emit("generatedEnd", requestsData);
-     io.to(CreatedBy).emit("generatedEnd", requestsData);
+    console.log(signer, CreatedBy, requestsData.id, "bdfhvk");
+    requestsData.status = status.active;
+    requestsData.signStatus = signStatus.Signed;
+    requestsData.signDate = new Date();
+    if (signer) io.to(signer).emit("generatedEnd", requestsData);
+    io.to(CreatedBy).emit("generatedEnd", requestsData);
     return;
   } catch (error) {
     console.error("Error in startSign:", error);
@@ -140,7 +151,7 @@ const processing = async (
   signatureUrl,
   outputDir,
   content,
-  templateId,
+  templateId
 ) => {
   const updateOps = [];
 
@@ -159,13 +170,13 @@ const processing = async (
         { id: templateId, "data.id": item.id },
         {
           $set: {
-            "data.$.url": `/signatureData/${templateId}/${ab}.pdf`,
+            "data.$.url": `http://localhost:3000/template/signatureData/${templateId}/${ab}.pdf`,
             "data.$.signedDate": new Date(),
             "data.$.signStatus": signStatus.Signed,
           },
         }
       );
-      updateOps.push(pdfPath)
+      updateOps.push(pdfPath);
       return pdfPath;
     } catch (err) {
       console.log("Processing error:", err);
