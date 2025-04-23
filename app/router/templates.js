@@ -15,10 +15,10 @@ const router = Router();
 
 router.get("/:templateId/preview/:entryId", async (req, res, next) => {
   try {
-    console.log(req.params);
+    // console.log(req.params);
     const { templateId, entryId } = req.params;
     if (!templateId) {
-      return res.status(400).json({ msg: "no templateId given" });
+      return res.status(400).json({ msg: "no templateId provided" });
     }
     if (!entryId) {
       return res.status(400).json({ msg: "preview Id is not given" });
@@ -27,6 +27,7 @@ router.get("/:templateId/preview/:entryId", async (req, res, next) => {
       id: templateId,
       status: status.active,
     });
+
     if (!template) {
       return res.status(404).json({ error: "no template found" });
     }
@@ -34,7 +35,7 @@ router.get("/:templateId/preview/:entryId", async (req, res, next) => {
       template.createdBy != req.session.userId &&
       template.assignedTo != req.session.userId
     ) {
-      return res.status(401).json({ error: "you are not authroized for this" });
+      return res.status(401).json({ error: "you are not authorized for this" });
     }
     const data = template.data.filter((obj) => obj.id == entryId);
     if (data.length == 0) {
@@ -65,17 +66,22 @@ router.get("/preview/docx/:id", checkLoginStatus, async (req, res, next) => {
     if (!id) {
       return res.status(400).json({ msg: "no templateId given" });
     }
-    const { url } = await templateServices.findOne(
+    const { url, createdBy, assignedTo } = await templateServices.findOne(
       {
         id: id,
         status: status.active,
       },
-      { url: 1 }
+      { url: 1, createdBy: 1, assignedTo: 1 }
     );
     if (!url) {
       return res.status(404).json({ error: "template not found" });
     }
-
+    if (
+      createdBy != req.session.userId &&
+      assignedTo != req.session.userId
+    ) {
+      return res.status(401).json({ error: "you are not authorized for this" });
+    }
     console.log(url);
     const content = await fs.promises.readFile(
       path.join("E:/Signature/signature-backend-template", url)
@@ -140,6 +146,18 @@ router.get(
 
       if (!templateId) {
         return req.status(400).json({ error: "no template id provided" });
+      }
+      const template = await templateServices.findOne({
+        id: templateId,
+        status: status.active,
+      });
+      if (
+        template.createdBy != req.session.userId &&
+        template.assignedTo != req.session.userId
+      ) {
+        return res
+          .status(401)
+          .json({ error: "you are not authorized for this" });
       }
       const folderPath = path.join(
         "E:/Signature/signature-backend-template",

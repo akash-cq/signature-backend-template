@@ -13,6 +13,7 @@ router.use(['/template', '/templates'], template);
 router.post('/login', async (req, res, next) => {
     try {
         const isLoggedIn = checkLoginStatus(req, res);
+        console.log(req.body)
         if (isLoggedIn) {
             return res.redirect('/');
         }

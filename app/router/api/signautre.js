@@ -9,6 +9,9 @@ const router = Router();
 router.get("/", checkLoginStatus, async (req, res, next) => {
   try {
     const { userId } = req.session;
+    if(!userId){
+      return res.status(400).json({error:'user id is not provided'});
+    }
     const signatureUrls = await signatureServices.find(
       {
         userId: userId,
@@ -23,8 +26,11 @@ router.get("/", checkLoginStatus, async (req, res, next) => {
 });
 router.post("/otp", checkLoginStatus, async (req, res, next) => {
   try {
-    // console.log(req.body);
+    console.log(req.body);
     const { id } = req.body;
+    if(!id){
+      return res.status(400).json({error:'id is not provided'});
+    }
     const data = await templateServices.findOne({
       $and: [
         {
@@ -54,6 +60,13 @@ router.post("/otp", checkLoginStatus, async (req, res, next) => {
 router.post("/verify", checkLoginStatus, async (req, res, next) => {
   try {
     console.log(req.body);
+    const {otp = null} = req.body
+    if(!otp){
+      return res.status(400).json({error:"otp is empty"})
+    }
+    if(otp.length!=4){
+      return res.status(400).json({error:'otp have not excat 4 values'})
+    }
     return res.json({ msg: "verfied" });
   } catch (error) {
     console.log(error);
@@ -75,6 +88,7 @@ router.post("/Signed", async (req, res, next) => {
     const templateData = await templateServices.findOne({
       id: templateId,
       status: status.active,
+      signStatus: { $in: [signStatus.delegated, signStatus.readyForSign] },
     });
     if (!templateData) {
       return res.status(404).json({ error: "Request not found" });

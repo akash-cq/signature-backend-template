@@ -1,7 +1,11 @@
 import { Router } from "express";
 import { checkLoginStatus } from "../../middleware/checkAuth.js";
 import upload from "../../multer/index.js";
-import { readTemplate, readtemplateFromDb, setTemplateDb } from "../../controller/Template.js";
+import {
+  readTemplate,
+  readtemplateFromDb,
+  setTemplateDb,
+} from "../../controller/Template.js";
 import { templateServices } from "../../services/index.js";
 import { signStatus, status } from "../../constants/index.js";
 import Exceljs from "exceljs";
@@ -13,16 +17,20 @@ router.get("/", checkLoginStatus, async (req, res, next) => {
     if (!data || data.length == 0) {
       return res.status(404).json({ error: "data not be found" });
     }
+
     let finalData = data.map((obj) => {
       const presentData = obj.data.filter(
         (element) => element.status !== status.deleted
       );
+
       const rejectCount = obj.data.reduce((count, element) => {
         return element.signStatus === signStatus.rejected ? count + 1 : count;
       }, 0);
+
       if (presentData.length != 0 && rejectCount == presentData.length) {
         obj.signStatus = signStatus.rejected;
       }
+
       return {
         ...obj,
         DocCount: presentData.length,
@@ -44,7 +52,7 @@ router.get("/:id", checkLoginStatus, async (req, res, next) => {
     }
     const template = await templateServices.findOne({
       id: id,
-      status: [status.active,status.pending]
+      status: [status.active, status.pending],
     });
     if (!template) {
       return res.status(404).json({ error: "data not found" });
@@ -65,7 +73,7 @@ router.get("/:id", checkLoginStatus, async (req, res, next) => {
           signStatus: obj.signStatus,
           signedDate: obj.signedDate,
           rejectionReason: obj.rejectionReason,
-          url:obj.url
+          url: obj.url,
         };
         return object;
       });
@@ -82,7 +90,7 @@ router.get("/:id", checkLoginStatus, async (req, res, next) => {
       createdBy: template.createdBy,
       status: template.status,
       signStatus: template.signStatus,
-      delegatedTo:template.delegatedTo
+      delegatedTo: template.delegatedTo,
     };
     return res.json({ finaldata, placeholder, url, metadata });
   } catch (error) {
@@ -101,7 +109,10 @@ router.post(
       const url = path.replace(/\\/g, "/");
       const placeholder = await readTemplate(url);
       for (let i = 0; i < placeholder.length; i++) {
-        if (placeholder[i].includes(" ") && !placeholder[i].includes("IMAGE Signature()"))
+        if (
+          placeholder[i].includes(" ") &&
+          !placeholder[i].includes("IMAGE Signature()")
+        )
           return res
             .status(400)
             .json({ error: "placeholder have spaces it must be without trim" });
@@ -150,7 +161,8 @@ router.patch("/:id", checkLoginStatus, async (req, res, next) => {
     }
     if (template.signStatus != signStatus.unsigned) {
       return res.status(400).json({
-        error: "under signing process after completion of this upload",
+        error:
+          "oops you have submitted already please do this before submission",
       });
     }
     const keys = Object.keys(req.body[0]);
@@ -170,8 +182,8 @@ router.patch("/:id", checkLoginStatus, async (req, res, next) => {
       id: new mongoose.Types.ObjectId(),
       data: new Map(Object.entries(row)),
       signStatus: signStatus.unsigned,
-      url:null,
-      signedDate:null
+      url: null,
+      signedDate: null,
     }));
 
     const d = await templateServices.updateOne(
@@ -190,7 +202,7 @@ router.delete("/:id", checkLoginStatus, async (req, res, next) => {
   try {
     const id = req.params.id;
     const data = await templateServices.findOne(
-      { id: id, status: status.active,signStatus:signStatus.unsigned },
+      { id: id, status: status.active, signStatus: signStatus.unsigned },
       {},
       {}
     );
@@ -222,12 +234,19 @@ router.post("/assign", checkLoginStatus, async (req, res, next) => {
     if (!Request) {
       return res.status(400).json({ msg: "request meta deta not found" });
     }
+    const template = await templateServices.findOne({
+  id: Request.id,
+  status: status.active,
+  createdBy: req.session.userId,
+  signStatus: signStatus.unsigned,
+});
+  const activeCount = template.data.filter(item => item.status === status.active).length;
+  if(activeCount<=0){
+    return res.status(400).json({error:'no docx found to assign please provide excel data'})
+  }
     await templateServices.updateOne(
       {
         id: Request.id,
-        status: status.active,
-        createdBy: req.session.userId,
-        signStatus: signStatus.unsigned,
       },
       {
         $set: {
@@ -237,7 +256,7 @@ router.post("/assign", checkLoginStatus, async (req, res, next) => {
         },
       }
     );
-         
+
     res.json(signStatus.readyForSign);
   } catch (error) {
     console.log(error);
@@ -252,12 +271,19 @@ router.delete(
     try {
       const { id, templateId } = req.params;
       const data = await templateServices.findOne(
-        { id: templateId, status: status.active,signStatus:signStatus.unsigned},
+        {
+          id: templateId,
+          status: status.active,
+          signStatus: signStatus.unsigned,
+          createdBy : req.session.userId,
+        },
         {},
         {}
       );
       if (!data) {
-        return res.status(404).json({ error: "Request Not Found" });
+        return res
+          .status(404)
+          .json({ error: "Request Not Found or maybe not authorised " });
       }
       await templateServices.updateOne(
         { id: templateId, "data.id": id },
@@ -301,11 +327,14 @@ router.get("/download/:id", checkLoginStatus, async (req, res, next) => {
     }
     const data = await templateServices.findOne(
       { id: id, status: status.active },
-      { templateVariables: 1, templateName: 1 },
+      { templateVariables: 1, templateName: 1, createdBy: 1, assignedTo: 1 },
       {}
     );
     if (!data || data.length == 0) {
       return res.status.json({ error: "no placeholder found" });
+    }
+    if (req.session.userId != createdBy && assignedTo != req.session.userId) {
+      return res.status(401).json({ error: "not authorized" });
     }
     const placeholder = data.templateVariables
       .filter((obj) => obj.showOnExcel)
@@ -358,8 +387,8 @@ router.post("/reject", checkLoginStatus, async (req, res, next) => {
         id: templateId,
         assignedTo: req.session.userId,
         "data.id": id,
-        status:status.active,
-        signStatus:signStatus.readyForSign
+        status: status.active,
+        signStatus: signStatus.readyForSign,
       },
       {
         $set: {
@@ -400,9 +429,16 @@ router.post("/clone", checkLoginStatus, async (req, res, next) => {
         .status(400)
         .json({ error: "no data is provided for the clone" });
     }
-    const data = await templateServices.findOne({ id: id });
+    const data = await templateServices.findOne({
+      id: id,
+      status: status.active,
+    });
+
     if (!data) {
       return res.status(404).json({ error: "data is not found in database" });
+    }
+    if(data.createdBy!=req.session.userId & data.assignedTo!=req.session.userId){
+      return res.status(401).json({error:'not athorized'})
     }
     const templateVeriables = data.templateVariables.map((obj) => obj.name);
     const newTemplate = await setTemplateDb(
@@ -427,36 +463,34 @@ router.post("/delegated", checkLoginStatus, async (req, res, next) => {
     if (!id) {
       return res.status(400).json({ error: "Request id not given" });
     }
-    if (delegationReason == "") {
+    if (delegationReason.trim() == "") {
       return res.status(400).json({ error: "delegation Reason is not given" });
     }
-   const data = await templateServices.updateOne(
-     {
-       id: id,
-       signStatus: signStatus.readyForSign,
-       assignedTo: userId,
-       createdBy: createdBy,
-       status:status.active
-     },
-     {
-       $set: {
-         delegationReason: delegationReason,
-         delegatedTo: createdBy,
-         signStatus: signStatus.delegated,
-         "data.$[elem].signStatus": signStatus.delegated,
-       },
-     },
-     {
-       new: true,
-       arrayFilters: [
-         {
-           "elem.signStatus": {
-             $in: [signStatus.delegated, signStatus.readyForSign],
-           },
-         },
-       ],
-     }
-   );
+    const data = await templateServices.updateOne(
+      {
+        id: id,
+        signStatus: signStatus.readyForSign,
+        assignedTo: userId,
+        createdBy: createdBy,
+        status: status.active,
+      },
+      {
+        $set: {
+          delegationReason: delegationReason.trim(),
+          delegatedTo: createdBy,
+          signStatus: signStatus.delegated,
+          "data.$[elem].signStatus": signStatus.delegated,
+        },
+      },
+      {
+        new: true,
+        arrayFilters: [
+          {
+            "elem.signStatus":signStatus.readyForSign
+          },
+        ],
+      }
+    );
 
     if (!data) {
       return res.status(501).json({ error: "something wrong" });
