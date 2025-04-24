@@ -31,6 +31,7 @@
     "multer": "^1.4.5-lts.2",
     "node-fetch": "^3.3.2",
     "nodemailer": "^6.10.0",
+    "pdf-merger-js": "^5.1.2",
     "qrcode": "^1.5.4",
     "socket.io": "^4.8.1",
     "word-extractor": "^1.0.4",
