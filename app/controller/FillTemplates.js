@@ -8,9 +8,23 @@ import libre from "libreoffice-convert";
 import { templateServices } from "../services/index.js";
 import { io } from "../config/socket.js";
 import axios from "axios";
-
+import QRCode from "qrcode";
 const libreConvertAsync = promisify(libre.convert);
 
+const generateQR = async (text) => {
+  try {
+    if (!text) return null;
+      const dataWithoutQRCode = { ...text };
+    delete dataWithoutQRCode.QR_Code;
+    const stringData = JSON.stringify(dataWithoutQRCode);
+    const dataURL = await QRCode.toDataURL(stringData); // returns full 'data:image/png;base64,...'
+    const base64 = dataURL.slice("data:image/png;base64,".length); // remove the prefix for docx-templates
+    return base64
+  } catch (err) {
+    console.error("QR code generation error:", err);
+    return null;
+  }
+};
 async function getImageBase64FromURL(imageUrl) {
   const response = await axios.get(imageUrl, { responseType: "arraybuffer" });
 
@@ -36,12 +50,23 @@ export const FillTemplate = async (content, entry) => {
         extension: extension,
       };
     };
+    const QR_Code = async () => {
+      if (!entry.QR_Code) return null;
+      const base64 = await generateQR(entry.QR_Code);
+      return {
+        width: 3,
+        height: 3,
+        data: base64,
+        extension: ".png",
+      };
+    };
     const buffer = await createReport({
       template: content,
       data: entry,
       cmdDelimiter: ["{", "}"],
       additionalJsContext: {
         Signature,
+        QR_Code,
       },
     });
 
@@ -56,7 +81,7 @@ export const startSign = async ([templateData, signature, userId]) => {
   try {
     const signatureUrl = signature.url;
     const dataNeedToSign = templateData.data.filter((obj) => {
-      console.log(obj.signStatus, obj.status, "ehcyehvbfcewvgfyu3wv");
+      // console.log(obj.signStatus, obj.status, "ehcyehvbfcewvgfyu3wv");
 
       return (
         (obj.signStatus == signStatus.unsigned ||
@@ -64,7 +89,7 @@ export const startSign = async ([templateData, signature, userId]) => {
         obj.status == status.active
       );
     });
-    console.log(dataNeedToSign);
+    // console.log(dataNeedToSign);
     const content = await fs.promises.readFile(
       path.join("E:/Signature/signature-backend-template", templateData.url)
     );
@@ -104,8 +129,8 @@ export const startSign = async ([templateData, signature, userId]) => {
       delegatedTo: templateData.delegatedTo,
       totalgenerated: 0,
     };
-        if (signer) io.to(signer).emit("generationStart", requestsData);
-        io.to(CreatedBy).emit("generationStart", requestsData);
+    if (signer) io.to(signer).emit("generationStart", requestsData);
+    io.to(CreatedBy).emit("generationStart", requestsData);
     for (let i = 0; i < dataNeedToSign.length; i += Limit) {
       console.log("start..............");
       const dataObj = dataNeedToSign.slice(i, i + Limit);
@@ -116,7 +141,7 @@ export const startSign = async ([templateData, signature, userId]) => {
         content,
         templateData.id
       );
-      console.log(signer, CreatedBy, requestsData.id, "bdfhvk");
+      // console.log(signer, CreatedBy, requestsData.id, "bdfhvk");
       requestsData.totalgenerated = requestsData.totalgenerated + ops.length;
       if (signer) io.to(signer).emit("generatedOneBatch", requestsData);
       io.to(CreatedBy).emit("generatedOneBatch", requestsData);
@@ -134,7 +159,7 @@ export const startSign = async ([templateData, signature, userId]) => {
       }
     );
     console.log("end...");
-    console.log(signer, CreatedBy, requestsData.id, "bdfhvk");
+    // console.log(signer, CreatedBy, requestsData.id, "bdfhvk");
     requestsData.status = status.active;
     requestsData.signStatus = signStatus.Signed;
     requestsData.signDate = new Date();
@@ -142,6 +167,28 @@ export const startSign = async ([templateData, signature, userId]) => {
     io.to(CreatedBy).emit("generatedEnd", requestsData);
     return;
   } catch (error) {
+    await templateServices.updateOne(
+      {
+        id: templateData.id,
+        status: status.active,
+      },
+      {
+        $set: {
+          status: status.active,
+          signStatus: templateData.signStatus,
+          "data.$[item].signStatus": templateData.signStatus,
+        },
+      },
+      {
+        arrayFilters: [
+          {
+            "item.signStatus": {
+              $in: [signStatus.delegated, signStatus.readyForSign],
+            },
+          },
+        ],
+      }
+    );
     console.error("Error in startSign:", error);
   }
 };
@@ -159,7 +206,7 @@ const processing = async (
     try {
       const entry = item.data;
       entry["Signature"] = signatureUrl;
-      entry["QR_Code"] = null;
+      entry["QR_Code"] = item.data;
 
       const buffer = await FillTemplate(content, entry);
       const pdfBuf = await libreConvertAsync(buffer, ".pdf", undefined);

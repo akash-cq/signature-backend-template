@@ -43,8 +43,7 @@ export const setTemplateDb = async (payload, req, placeholder) => {
         showOnExcel: true,
       };
       if (name == "IMAGE Signature()") obj.showOnExcel = false;
-      if (name == "QR_Code") {
-        obj.required = false;
+      if (name == "IMAGE QR_Code()") {
         obj.showOnExcel = false;
       }
       return obj;

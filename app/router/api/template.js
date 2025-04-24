@@ -111,7 +111,9 @@ router.post(
       for (let i = 0; i < placeholder.length; i++) {
         if (
           placeholder[i].includes(" ") &&
-          !placeholder[i].includes("IMAGE Signature()")
+          !placeholder[i].includes(
+            "IMAGE Signature()") && !placeholder[i].includes("IMAGE QR_Code()")
+          
         )
           return res
             .status(400)
@@ -121,11 +123,11 @@ router.post(
         return res.status(400).json({ error: "no placeholder found" });
       if (
         !placeholder.includes("IMAGE Signature()") ||
-        !placeholder.includes("QR_Code")
+        !placeholder.includes("IMAGE QR_Code()")
       ) {
         return res.status(400).json({
           error:
-            "no {IMAGE Signature()} or {QR_Code} placeholder found please insert these also",
+            "no {IMAGE Signature()} or {IMAGE QR_Code()} placeholder found please insert these also",
         });
       }
       const data = await setTemplateDb(

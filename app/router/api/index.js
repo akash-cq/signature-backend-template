@@ -9,4 +9,6 @@ router.use('/courts', courtApi);
 router.use('/users', userApi);
 router.use('/signatures', signatureApi);
 router.use('/templates', templateApi);
+router.use("/disptach", templateApi);
+
 export default router;
