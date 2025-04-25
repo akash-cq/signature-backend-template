@@ -43,9 +43,7 @@ router.post("/", checkLoginStatus, async (req, res, next) => {
         .status(400)
         .json({ error: "this index number already in use" });
     }
-    // const signedData = templateData.data.filter((obj) => {
-    //   return obj.signStatus == signStatus.Signed;
-    // });
+
     const merger = new PDFMerger();
     const data = {};
     data.templateId = templateId;

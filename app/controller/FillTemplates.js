@@ -18,7 +18,7 @@ const generateQR = async (text) => {
     delete dataWithoutQRCode.QR_Code;
     const stringData = JSON.stringify(dataWithoutQRCode);
     const dataURL = await QRCode.toDataURL(stringData); // returns full 'data:image/png;base64,...'
-    const base64 = dataURL.slice("data:image/png;base64,".length);
+    const base64 = dataURL.slice("data:image/png;base64,".length); // remove the prefix
     return base64
   } catch (err) {
     console.error("QR code generation error:", err);
@@ -44,8 +44,8 @@ export const FillTemplate = async (content, entry) => {
       const { base64, extension } = await getImageBase64FromURL(imageUrl);
 
       return {
-        width: 6,
-        height: 3,
+        width: 2,
+        height: 1,
         data: base64,
         extension: extension,
       };

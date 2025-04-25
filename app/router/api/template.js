@@ -335,7 +335,10 @@ router.get("/download/:id", checkLoginStatus, async (req, res, next) => {
     if (!data || data.length == 0) {
       return res.status.json({ error: "no placeholder found" });
     }
-    if (req.session.userId != createdBy && assignedTo != req.session.userId) {
+    if (
+      req.session.userId != data.createdBy &&
+      data.assignedTo != req.session.userId
+    ) {
       return res.status(401).json({ error: "not authorized" });
     }
     const placeholder = data.templateVariables
@@ -439,7 +442,7 @@ router.post("/clone", checkLoginStatus, async (req, res, next) => {
     if (!data) {
       return res.status(404).json({ error: "data is not found in database" });
     }
-    if(data.createdBy!=req.session.userId & data.assignedTo!=req.session.userId){
+    if(data.createdBy!=req.session.userId && data.assignedTo!=req.session.userId){
       return res.status(401).json({error:'not athorized'})
     }
     const templateVeriables = data.templateVariables.map((obj) => obj.name);
@@ -504,3 +507,14 @@ router.post("/delegated", checkLoginStatus, async (req, res, next) => {
   }
 });
 export default router;
+
+/**
+ * do folowing things
+ * 1. http methods
+ * 2.maintainbility/readibility of code
+ * 3 checkpost
+ * 4 dispatch correction
+ * 5. template pdf generatetion
+ * 6 frontend code correction 
+ */
+ 
