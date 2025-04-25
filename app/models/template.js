@@ -15,6 +15,9 @@ export const schema = new mongoose.Schema({
     'dispatchRegisterIndex': {
         type: Number,
     },
+    'dispatchURL': {
+        type: String,
+    },
     'status': {
         type: Number,
         required: true,

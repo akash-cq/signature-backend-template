@@ -204,7 +204,7 @@ router.delete("/:id", checkLoginStatus, async (req, res, next) => {
   try {
     const id = req.params.id;
     const data = await templateServices.findOne(
-      { id: id, status: status.active, signStatus: signStatus.unsigned },
+      { id: id, status: status.active, signStatus:{ $in:[signStatus.unsigned,signStatus.dispatched] }},
       {},
       {}
     );

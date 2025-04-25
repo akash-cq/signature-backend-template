@@ -19,7 +19,7 @@ export const dispatchCreation = async (data) => {
   const dispatchScehma = {};
   dispatchScehma.index = data.index;
   dispatchScehma.courtId = data.courtId;
-  dispatchScehma.dataId = new mongoose.Types.ObjectId();
+  dispatchScehma.dataId = data?.id ?    data.id:new mongoose.Types.ObjectId();
   dispatchScehma.templateId = data.templateId;
   const d = await dispatchServices.save(dispatchScehma);
   return d;

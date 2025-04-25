@@ -18,7 +18,7 @@ const generateQR = async (text) => {
     delete dataWithoutQRCode.QR_Code;
     const stringData = JSON.stringify(dataWithoutQRCode);
     const dataURL = await QRCode.toDataURL(stringData); // returns full 'data:image/png;base64,...'
-    const base64 = dataURL.slice("data:image/png;base64,".length); // remove the prefix for docx-templates
+    const base64 = dataURL.slice("data:image/png;base64,".length);
     return base64
   } catch (err) {
     console.error("QR code generation error:", err);
